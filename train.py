@@ -16,13 +16,14 @@ def build_parser():
     # Required arguments
     parser.add_argument('-i', '--image_folder', default="images")
     # Arguments with default values
-    parser.add_argument('-e', '--epochs', default=500)
-    parser.add_argument('-b', '--batch_size', default=32)
+    parser.add_argument('-e', '--epochs', default=5000)
+    parser.add_argument('-b', '--batch_size', default=64)
     parser.add_argument('-c', '--checkpoint', default=1000)
     parser.add_argument('-cd', '--checkpoint_directory',
                         default='checkpoint_directory')    
     parser.add_argument('--patch_size', '-p', default=32)
-    parser.add_argument('--train', action='store_true', default=False)
+    parser.add_argument('--debug', '-d', action='store_true', default=False)
+    parser.add_argument('--train', '-t',  action='store_true', default=False)
     return parser # Return the parser 
 
 
@@ -136,6 +137,7 @@ def train(args=None):
     print ('Created model...')
     total_iterations = 0
     sum_iterations = 0
+    checkpoint_num = 0
     for epoch in range(args.epochs):
         print ('Training epoch', epoch)
         print ('total iterations', total_iterations)
@@ -150,20 +152,30 @@ def train(args=None):
             sum_iterations += len(train_x)
 
             if (sum_iterations > args.checkpoint):
-                sum_iterations = 0
-
                 print ('Reached checkpoint at iteration', iteration)
+                checkpoint_num += 1 # Updating checkpoint number
+                sum_iterations = 0 # clearing accumulated iterations
                 checkpoint_filepath = os.path.join(args.checkpoint_directory,
                                                   '{}_model.h5py'.format(total_iterations))
-
                 if not os.path.exists(args.checkpoint_directory):
                     os.makedirs(args.checkpoint_directory)
-                    
-                model.save_weights(checkpoint_filepath, overwrite=True)
-                val_x, val_y = next(generate_data(args.image_folder, max_patches = 0.001))
 
+                # Saving model
+                model.save_weights(checkpoint_filepath, overwrite=True)
+
+                # Scoring model
+                val_x, val_y = next(generate_data(args.image_folder, max_patches = 0.0001))
                 test_progbar = keras.utils.generic_utils.Progbar(val_x.shape[0])
                 score = model.test_on_batch(val_x, val_y)
+
+                pred_y = model.predict(val_x)
+                # Save some images 
+                for i, (orig, real, pred) in enumerate(zip(val_x, val_y, pred_y)):
+                    in_patch = np.rollaxis(orig, axis=0, start=3)
+                    imsave('debug/real_patch_{0}_{1}.jpg'.format(i, checkpoint_num), vec2img(real))
+                    imsave('debug/pred_patch_{0}_{1}.jpg'.format(i, checkpoint_num), vec2img(pred))
+                    imsave('debug/input_patch_{0}_{1}.jpg'.format(i, checkpoint_num), in_patch)
+                print (index, 'images saved for debugging')
                 
                 progbar.add(val_x.shape[0], values=[('test loss', score[0])])
                 print ('test loss', score[0])
