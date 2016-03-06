@@ -76,8 +76,8 @@ def generate_data(img_folder, max_patches=0.001):
             print ("Shapes of tensors", small_patches.shape, patches.shape)
             for i, (small, big) in enumerate(zip(small_patches, patches)):
                 small_img = np.rollaxis(small, axis=0, start=3)
-                imsave('tmp/small_patch_{}.jpg'.format(i), small_img)
-                imsave('tmp/big_patch_{}.jpg'.format(i), vec2img(big))
+                imsave('debug/small_patch_{}.jpg'.format(i), small_img)
+                imsave('debug/big_patch_{}.jpg'.format(i), vec2img(big))
 
         yield small_patches, patches
 
@@ -109,7 +109,6 @@ def decode(model, image):
     model_X = img_to_input(image)
     output = model.predict(model_X)    
     img = vec2img(output_vector)
-    imsave('tmp.jpg', img)
     return True
 
 def test():
@@ -118,15 +117,16 @@ def test():
     
     score = model.test_on_batch(val_x, val_y)
     print (score)
-    pred_y = model.predict(val_x)
-    for index, (orig, real, pred) in enumerate(zip(val_x, val_y, pred_y)):
-        print ('Saving index', index)
-        print (orig.shape)
-        in_patch = np.rollaxis(orig, axis=0, start=3)
-        print (in_patch.shape)
-        imsave('tmp/real_patch_{}.jpg'.format(index), vec2img(real))
-        imsave('tmp/pred_patch_{}.jpg'.format(index), vec2img(pred))
-        imsave('tmp/input_patch_{}.jpg'.format(index), in_patch)
+    if args.debug:
+        pred_y = model.predict(val_x)
+        for index, (orig, real, pred) in enumerate(zip(val_x, val_y, pred_y)):
+            print ('Saving index', index)
+            print (orig.shape)
+            in_patch = np.rollaxis(orig, axis=0, start=3)
+            print (in_patch.shape)
+            imsave('debug/real_patch_{}.jpg'.format(index), vec2img(real))
+            imsave('debug/pred_patch_{}.jpg'.format(index), vec2img(pred))
+            imsave('debug/input_patch_{}.jpg'.format(index), in_patch)
     
     print ('Done')
     return True
