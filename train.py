@@ -176,7 +176,7 @@ def train(args=None):
                     imsave('debug/pred_patch_{0}_{1}.jpg'.format(i, checkpoint_num), vec2img(pred))
                     imsave('debug/input_patch_{0}_{1}.jpg'.format(i, checkpoint_num), in_patch)
 
-                print (index, 'images saved for debugging')                
+                print (i, 'images saved for debugging')                
                 progbar.add(val_x.shape[0], values=[('test loss', score[0])])
                 print ('test loss', score[0])
                 
