@@ -100,6 +100,7 @@ def img_to_input(image):
     input_img = np.rollaxis(image, axis=2, start=0)
     return np.array([input_img])
                 
+
 def load_model(model_path):
     model = create_model()
     model.load_weights(model_path)
@@ -130,8 +131,8 @@ def test():
             imsave('debug/input_patch_{}.jpg'.format(index), in_patch)
     
     print ('Done')
-    return True
-        
+
+
 def train(args=None):
     model = create_model()
     print ('Created model...')
@@ -145,7 +146,6 @@ def train(args=None):
 
             progbar = keras.utils.generic_utils.Progbar(train_x.shape[0])    
             loss = model.train_on_batch(train_x, train_y)
-
             progbar.add(train_x.shape[0], values=[('train loss', loss[0])])
 
             total_iterations += len(train_x)
@@ -168,15 +168,15 @@ def train(args=None):
                 test_progbar = keras.utils.generic_utils.Progbar(val_x.shape[0])
                 score = model.test_on_batch(val_x, val_y)
 
+                # Save some images to see how well the model is training 
                 pred_y = model.predict(val_x)
-                # Save some images 
                 for i, (orig, real, pred) in enumerate(zip(val_x, val_y, pred_y)):
                     in_patch = np.rollaxis(orig, axis=0, start=3)
                     imsave('debug/real_patch_{0}_{1}.jpg'.format(i, checkpoint_num), vec2img(real))
                     imsave('debug/pred_patch_{0}_{1}.jpg'.format(i, checkpoint_num), vec2img(pred))
                     imsave('debug/input_patch_{0}_{1}.jpg'.format(i, checkpoint_num), in_patch)
-                print (index, 'images saved for debugging')
-                
+
+                print (index, 'images saved for debugging')                
                 progbar.add(val_x.shape[0], values=[('test loss', score[0])])
                 print ('test loss', score[0])
                 
