@@ -12,17 +12,16 @@ def convolutional_dnn(channels, input_patch, output_patch):
     model.add(Activation('relu'))
     model.add(Convolution2D(32, 3, 3))
     model.add(Activation('relu'))
+    model.add(Dropout(0.5))
     model.add(Convolution2D(64, 3, 3))
     model.add(Activation('relu'))
-    model.add(Convolution2D(64, 3, 3))
-    model.add(Activation('relu'))
+    model.add(Dropout(0.5))
     model.add(Convolution2D(128, 3, 3))
     model.add(Activation('relu'))
     model.add(Convolution2D(channels, 3, 3))
     model.add(Flatten())
     model.add(Dense(channels * output_patch * output_patch))    
-    model.compile(loss='mean_squared_error',
-                  optimizer=Adagrad())    
+    model.compile(loss='mse', optimizer=Adagrad())    
     return model
 
 def create_model():
