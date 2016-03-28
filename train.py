@@ -62,6 +62,8 @@ def generate_data(img_folder, max_patches=0.001):
         input_matrix = np.array([img_tensor])
         # shape : (1, row, col, channels)
 
+        input_matrix = input_matrix/255.0 # Casting into 0 to 1 space which DNN models learn faster
+        
         patches = patch_extractor.transform(input_matrix)
         # shape : (n_samples, row, col, channels)
 
@@ -93,7 +95,7 @@ def vec2img(vector, n_channels=3):
     '''
     tensor = vector.reshape(n_channels, args.patch_size, args.patch_size)
     row_col_channel_tensor = np.rollaxis(tensor, axis=0, start=3) # shape : (rows, cols, channels)
-    return row_col_channel_tensor
+    return row_col_channel_tensor * 255 # Putting back into rgb format
 
 def img_to_input(image):
     '''
