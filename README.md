@@ -12,3 +12,6 @@ The goal for this project is to provide a generic super resolution algorithm for
 <b>Done</b>
 - Modularize and make the model definition code more object-oriented to make future modifications easier. 
 
+<b>References</b>
+- <i>Radford, A., Metz, L. and Chintala, S., 2015. Unsupervised representation learning with deep convolutional generative adversarial networks. arXiv preprint arXiv:1511.06434.</i>
+- <i>Ledig, C., Theis, L., Huszár, F., Caballero, J., Cunningham, A., Acosta, A., Aitken, A., Tejani, A., Totz, J., Wang, Z. and Shi, W., 2016. Photo-realistic single image super-resolution using a generative adversarial network. arXiv preprint arXiv:1609.04802.</i>
