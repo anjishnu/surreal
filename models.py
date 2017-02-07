@@ -3,8 +3,6 @@ import numpy as np
 import math
 import logging 
 
-logger = logging.getLogger()
-
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers import Reshape
@@ -15,10 +13,10 @@ from keras.layers.convolutional import Convolution2D, MaxPooling2D
 from keras.layers.core import Flatten
 from keras.optimizers import SGD
 from keras.datasets import mnist
+from PIL import Image 
+import scipy.misc
 
-from PIL import Image as img
-
-
+logger = logging.getLogger()
 
 class DCGAN(object):
 
@@ -26,8 +24,13 @@ class DCGAN(object):
 
     def __init__(self, input_size=100, input_shape=(1, 28, 28)):
         self.BATCH_SIZE=128
-        self.input_size = input_size
         self.input_shape = input_shape
+
+        image_dimension = 1
+        for dimension in input_shape:
+            image_dimension = image_dimension*dimension            
+        self.input_size = image_dimension/4 # We are downscaling by a factor of 4
+
         self.generator = self.get_generator()
         self.discriminator = self.get_discriminator()        
         # E2E model
@@ -136,19 +139,39 @@ class DCGAN(object):
             print("Epoch is", self.epoch)
             logging.info("training epoch {}".format(str(self.epoch)))
             self.train_epoch()
-
             
-    def get_random_noise(self):
-        noise = np.zeros((self.BATCH_SIZE, self.input_size))
-        for i in range(self.BATCH_SIZE):
-            noise[i, :] = np.random.uniform(-1, 1, 100)
-        return noise
+            
+    def get_random_noise(self): # Change to get inputs
+
+        #noise = np.zeros((self.BATCH_SIZE, self.input_size))
+        #for i in range(self.BATCH_SIZE):
+        #    # Uniform noise 
+        #    noise[i, :] = np.random.uniform(-1, 1, self.input_size)
+
+        input_pixels = np.zeros((self.BATCH_SIZE, self.input_size))
+
+        for i, image in enumerate(self.image_batch):
+            # Keras to Scipy
+            # print ('1:', image.shape)
+            # 1: (1, 28, 28)
+            #image = np.rollaxis(image, 0, 3)
+            # 2D_image 
+            img_2d = image[0]
+            #2: (28, 28, 1)
+            # Downscaling
+
+            img_2d = scipy.misc.imresize(img_2d, 0.5, 'bicubic') 
+            # print ('3:', image.shape)
+            # Scipy to keras
+            input_pixels[i, :] = img_2d.flatten()
+           
+        return input_pixels
 
     
-    def generate_images(self, batch_size=None):
+    def generate_images(self, image_batch, batch_size=None):
         if not batch_size: batch_size = self.BATCH_SIZE
         noise = self.get_random_noise()
-        generated_images = self.generator.predict(noise, verbose=0)
+        generated_images = self.generator.predict(noise, verbose=0)        
         return generated_images
 
     
@@ -162,28 +185,30 @@ class DCGAN(object):
             # Random noise to start off with, replace with latent vectors when you get time
 
             batch_start, batch_end = (self.index)*self.BATCH_SIZE, (self.index+1)*self.BATCH_SIZE
-            image_batch = self.X_train[batch_start : batch_end]
-            generated_images = self.generate_images()
-            
+            image_batch = self.X_train[batch_start : batch_end]           
+            self.image_batch = image_batch
+            generated_images = self.generate_images(image_batch) 
             
             if self.index % 20 == 0:
                 # Monitor the progress of the model
-                image = self.combine_images(generated_images)
-                output_img="epoch_{epoch}_img_{index}.png".format(epoch=str(self.epoch), 
-                                                                  index=str(self.index))
-                Image.fromarray(image.astype(np.uint8)).save(output_img)
+                gen_image = self.combine_images(generated_images)
+                ref_image = self.combine_images(self.image_batch)
+                output_img="debug/epoch_{epoch}_img_{index}.png".format(epoch=str(self.epoch), 
+                                                                        index=str(self.index))
+                ref_img = "debug/reference_epoch_{epoch}_img_{index}.png".format(epoch=str(self.epoch),
+                                                                        index=str(self.index))
+                Image.fromarray(gen_image.astype(np.uint8)).save(output_img)
+                Image.fromarray(ref_image.astype(np.uint8)).save(ref_img)
              
-            # Train discriminator        
             logging.info('Training discriminator...')
             self.train_discriminator(image_batch, generated_images)            
-            # Train generator 
             logging.info('Training generator...')
             self.train_generator()
                         
             if self.index % 10 == 9:
                 # Save weights every now and then
-                self.generator.save_weights('generator', True)
-                self.discriminator.save_weights('discriminator', True)
+                self.generator.save_weights('checkpoint/latest_generator.h5', True)
+                self.discriminator.save_weights('checkpoint/latest_discriminator.h5', True)
                 print('Saved weights...epoch:{} {}'.format(str(self.epoch), str(self.index)))
 
 
