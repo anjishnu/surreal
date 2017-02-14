@@ -6,7 +6,7 @@ import logging
 from keras.models import Sequential
 from keras.models import Model
 
-from keras.layers import Dense
+from keras.layers import Dense, Dropout
 from keras.layers import Reshape
 from keras.layers.core import Activation
 from keras.layers.normalization import BatchNormalization
@@ -35,7 +35,7 @@ class DCGAN(object):
                  discriminator_weights=None, generator_weights=None):
 
         self.BATCH_SIZE=128
-        self.LATEST_DISCRIMINATOR = 'checkpoint/latest_generator.h5'
+        self.LATEST_DISCRIMINATOR = 'checkpoint/latest_discriminator.h5'
         self.LATEST_GENERATOR = 'checkpoint/latest_generator.h5'
 
         self.input_shape = input_shape
@@ -43,6 +43,7 @@ class DCGAN(object):
         for dimension in input_shape:
             image_dimension = image_dimension*dimension            
         self.input_size = image_dimension/4 # We are downscaling by a factor of 4
+        self.noise_vector_size = 100
 
         self.generator = self.get_generator()
         self.discriminator = self.get_discriminator()        
@@ -54,9 +55,10 @@ class DCGAN(object):
         d_optim = SGD(lr=0.0005, momentum=0.9, nesterov=True) # discriminator optimizer
         g_optim = SGD(lr=0.0005, momentum=0.9, nesterov=True) # generator optimizer        
         self.generator.compile(loss='binary_crossentropy', optimizer="SGD")
-        self.discriminator_on_generator.compile(loss='binary_crossentropy', optimizer=g_optim)
-        self.discriminator.compile(loss='binary_crossentropy', optimizer=d_optim)
+        self.discriminator_on_generator.compile(loss='binary_crossentropy',  optimizer=g_optim)
+        self.discriminator.compile(loss='binary_crossentropy', optimizer=d_optim, metrics=['accuracy'])
         # Complete
+
         if discriminator_weights:
             self.discriminator.load_weights(discriminator_weights)
         if generator_weights:
@@ -65,10 +67,22 @@ class DCGAN(object):
     
     def get_generator(self):
         ''' Generative part of the network '''
-        model = Sequential()
-        model.add(Dense(input_dim=self.input_size, output_dim=1024))
+        
+        # Image encoder
+        image_branch = Sequential()
+        image_branch.add(Dense(input_dim=self.input_size, output_dim=1024))
+
+        # Noise encoder
+        noise_branch = Sequential()
+        noise_branch.add(Dense(input_dim=self.noise_vector_size, output_dim=200))
+        
+        merged = Merge([image_branch, noise_branch], mode='concat')
+        
+        model = Sequential()        
+        model.add(merged)
         model.add(Activation('tanh'))
         model.add(Dense(128*7*7))
+        model.add(Dropout(0.5))
         model.add(BatchNormalization(mode=2))
         model.add(Activation('tanh'))
         model.add(Reshape((128, 7, 7), input_shape=(128*7*7,)))
@@ -83,9 +97,8 @@ class DCGAN(object):
     
     def get_discriminator(self):
         ''' Discriminator model '''
-
-
         # A model to encode the generated image
+        
         model = Sequential()
         model.add(Convolution2D(64, 5, 5, border_mode='same',
                                 input_shape=self.input_shape))        
@@ -112,15 +125,16 @@ class DCGAN(object):
 
         return final_model
 
-
     def get_discriminator_on_generator(self, generator, discriminator):
         ''' Composite model - generator and discriminator '''
         downsampled_input = Input(shape=(self.input_size,))
-        predicted_image = generator(downsampled_input)
+        noise = Input(shape=(self.noise_vector_size,))
+
+        predicted_image = generator([downsampled_input, noise])
         
-        output = discriminator([predicted_image, downsampled_input])        
+        output = discriminator([predicted_image, downsampled_input]) 
         discriminator.trainable = False
-        model = Model(input=[downsampled_input], output=output)
+        model = Model(input=[downsampled_input, noise], output=output)
         return model
 
     
@@ -157,7 +171,7 @@ class DCGAN(object):
         self.train_model()
         
         
-    def train_model(self, num_epochs=100):
+    def train_model(self, num_epochs=500):
         for self.epoch in range(num_epochs):
             print("Epoch is", self.epoch)
             logging.info("training epoch {}".format(str(self.epoch)))
@@ -165,14 +179,15 @@ class DCGAN(object):
             
 
     def get_uniform_noise(self):
-        noise = np.zeros((self.BATCH_SIZE, self.input_size))
+        noise = np.zeros((self.BATCH_SIZE, self.noise_vector_size))
         for i in range(self.BATCH_SIZE):
             # Uniform noise 
-            noise[i, :] = np.random.uniform(-1, 1, self.input_size)
+            noise[i, :] = np.random.uniform(-1, 1, self.noise_vector_size)
         return noise
             
     def get_input_vector(self): # Change to get inputs
         input_pixels = np.zeros((self.BATCH_SIZE, self.input_size))
+        
         for i, image in enumerate(self.image_batch):
             # Keras to Scipy
             # print ('1:', image.shape)
@@ -181,16 +196,21 @@ class DCGAN(object):
             # Downscaling
             img_2d = scipy.misc.imresize(img_2d, 0.5, 'bicubic') 
             input_pixels[i, :] = img_2d.flatten()
-           
+        
         return input_pixels
-
+                                                
     
-    def generate_images(self, image_batch, batch_size=None):
-        if not batch_size: batch_size = self.BATCH_SIZE
-        noise = self.get_input_vector()
-        generated_images = self.generator.predict(noise, verbose=0)        
-        return generated_images
+    def generate_images(self, downsampled_vector, noise, batch_size=None):
+        '''
+        - Downsampled vector is a representation of the downsampled image 
+        - Noise vector is a vector of random noise
+        '''
 
+        if not batch_size: batch_size = self.BATCH_SIZE
+        print('shapes', downsampled_vector.shape, noise.shape)
+        generated_images = self.generator.predict([downsampled_vector, noise], verbose=0)        
+        return generated_images
+    
     
     def train_epoch(self):
 
@@ -203,21 +223,24 @@ class DCGAN(object):
 
             batch_start, batch_end = (self.index)*self.BATCH_SIZE, (self.index+1)*self.BATCH_SIZE
             self.image_batch = self.X_train[batch_start : batch_end]           
-            self.generated_images = self.generate_images(self.image_batch) 
-            self.downsampled = self.get_input_vector()        
-            
-            if self.index % 20 == 0: self.save_debug_output() # Every now and then - save the debug output
 
+            self.downsampled = self.get_input_vector()
+            self.noise = self.get_uniform_noise()
+
+            self.generated_images = self.generate_images(self.downsampled, self.noise) 
+
+            if self.index % 20 == 0: self.save_debug_output() # Every now and then - save the debug output
             logging.info('Training discriminator...')
             self.train_discriminator(self.image_batch, self.generated_images, self.downsampled)            
             logging.info('Training generator...')
-            self.train_generator(self.downsampled)
+            self.train_generator(self.downsampled, self.noise)
                         
             if self.index % 10 == 9:
                 # Save weights every now and then
                 self.generator.save_weights(self.LATEST_GENERATOR, True)
                 self.discriminator.save_weights(self.LATEST_DISCRIMINATOR, True)
                 print('Saved weights...epoch:{} {}'.format(str(self.epoch), str(self.index)))
+
 
     def save_debug_output(self):
         # Monitor the progress of the model
@@ -226,8 +249,15 @@ class DCGAN(object):
         img_template = output_template + '.png'
 
         #con_image = self.combine_images(self.downsampled)
+
+        # Prediction accuracy
+        test_images = np.concatenate((self.image_batch, self.generated_images))
+        targets = [1]*len(self.image_batch) + [0]*len(self.generated_images)
+        conditioning = np.concatenate((self.downsampled, self.downsampled))
+        metrics = self.discriminator.test_on_batch([test_images, conditioning], targets)
+        print ('metrics', metrics)
         gen_image = self.combine_images(self.generated_images)
-        ref_image = self.combine_images(self.image_batch)                
+        ref_image = self.combine_images(self.image_batch)           
         
         #conditioning_img = 'debug/conditioning/{}'.format(img_template)
         hypothesis_img = "debug/hypothesis/{}".format(img_template)
@@ -248,10 +278,10 @@ class DCGAN(object):
         print("batch {index} distriminative_loss : {loss}".format(index=str(self.index), loss=str(d_loss)))
         
     
-    def train_generator(self, downsampled):
+    def train_generator(self, downsampled, noise):
         # Train generator 
         self.discriminator.trainable = False 
-        g_loss = self.discriminator_on_generator.train_on_batch(downsampled, [1] * self.BATCH_SIZE)            
+        g_loss = self.discriminator_on_generator.train_on_batch([downsampled, noise], [1] * self.BATCH_SIZE)            
         print("batch {index} generative_loss : {loss}".format(index=str(self.index), loss=str(g_loss)))
         
 
@@ -304,7 +334,7 @@ def get_args():
     parser.add_argument("--nice", dest="nice", action="store_true")
     parser.add_argument('-g', '--generator_weights', default=None)
     parser.add_argument('-d', '--discriminator_weights', default=None)
-
+    parser.add_argument('-e', '--epochs', default=500, type=int)
     parser.set_defaults(nice=False)
     args = parser.parse_args()
     return args
